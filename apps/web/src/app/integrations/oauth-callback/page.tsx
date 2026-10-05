@@ -9,13 +9,17 @@ import { useAuth } from '../../../context/auth-context';
 function OAuthCallbackContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const { user, activeClient } = useAuth();
+  const { user, activeClient, loading } = useAuth();
+  const executedRef = React.useRef(false);
 
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
   const [message, setMessage] = useState('Exchanging authorization code for secure access tokens...');
   const [pagesCount, setPagesCount] = useState<number | null>(null);
 
   useEffect(() => {
+    if (loading) return;
+    if (executedRef.current) return;
+
     const code = searchParams.get('code');
     const error = searchParams.get('error');
     const errorDescription = searchParams.get('error_description');
@@ -31,6 +35,8 @@ function OAuthCallbackContent() {
       setMessage('Missing authorization code in redirect URL.');
       return;
     }
+
+    executedRef.current = true;
 
     const processOAuth = async () => {
       try {
@@ -87,7 +93,8 @@ function OAuthCallbackContent() {
         }
       } catch (err: any) {
         setStatus('error');
-        setMessage(err.message || 'An unexpected error occurred during OAuth processing.');
+        const detail = err.response?.data?.message || err.message || 'An unexpected error occurred during OAuth processing.';
+        setMessage(typeof detail === 'string' ? detail : JSON.stringify(detail));
       }
     };
 

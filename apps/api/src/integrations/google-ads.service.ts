@@ -222,8 +222,8 @@ export class GoogleAdsService {
    * Exchange OAuth code for Google Access and Refresh Tokens
    */
   async exchangeCodeForTokens(code: string, redirectUri: string): Promise<any> {
-    const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET;
+    const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
 
     if (!clientId || !clientSecret) {
       throw new BadRequestException('GOOGLE_OAUTH_CLIENT_ID or GOOGLE_OAUTH_CLIENT_SECRET is missing');
@@ -346,7 +346,7 @@ export class GoogleAdsService {
    * Discover Accessible Google Ads Accounts (including MCC and client accounts)
    */
   async listAccessibleCustomers(accessToken: string, developerToken?: string): Promise<string[]> {
-    const devToken = developerToken || process.env.GOOGLE_ADS_DEVELOPER_TOKEN || 'TEST_DEV_TOKEN';
+    const devToken = developerToken || process.env.GOOGLE_ADS_DEVELOPER_TOKEN || process.env.GOOGLE_DEVELOPER_TOKEN || 'TEST_DEV_TOKEN';
     const url = `${this.baseUrl}/${this.apiVersion}/customers:listAccessibleCustomers`;
 
     try {

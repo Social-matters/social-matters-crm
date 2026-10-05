@@ -258,16 +258,21 @@ export class IntegrationsService {
 
       const encrypted = this.encryptionService.encrypt(credentialsObj);
 
+      const targetOrgId = organizationId || user?.organizationId;
+      if (!targetOrgId) {
+        throw new BadRequestException('Organization ID is missing for Google Ads integration');
+      }
+
       const integration = await this.prisma.integration.upsert({
         where: {
           organizationId_platform_externalId: {
-            organizationId,
+            organizationId: targetOrgId,
             platform: PlatformType.GOOGLE,
             externalId: primaryCustomerId,
           },
         },
         create: {
-          organizationId,
+          organizationId: targetOrgId,
           platform: PlatformType.GOOGLE,
           accountName: `Google Ads (${formattedCustomerId})`,
           externalId: primaryCustomerId,
