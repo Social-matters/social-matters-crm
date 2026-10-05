@@ -33,11 +33,23 @@ function OAuthCallbackContent() {
     }
 
     const processOAuth = async () => {
-      try {
-        const orgId = activeClient?.id || user?.organizationId;
+        const rawState = searchParams.get('state');
+        let targetPlatform = 'META';
+        let orgId = activeClient?.id || user?.organizationId;
+
+        if (rawState) {
+          try {
+            const parsed = JSON.parse(atob(rawState));
+            if (parsed.platform) targetPlatform = parsed.platform;
+            if (parsed.organizationId) orgId = parsed.organizationId;
+          } catch {
+            if (rawState.toUpperCase().includes('GOOGLE')) targetPlatform = 'GOOGLE';
+          }
+        }
+
         const redirectUri = `${window.location.origin}/integrations/oauth-callback`;
 
-        const res = await ApiClient.post<any>('/integrations/oauth/META/callback', {
+        const res = await ApiClient.post<any>(`/integrations/oauth/${targetPlatform}/callback`, {
           code,
           redirectUri,
           organizationId: orgId,
@@ -45,8 +57,12 @@ function OAuthCallbackContent() {
 
         if (res.data?.success) {
           setStatus('success');
-          setPagesCount(res.data.pagesCount || 0);
-          setMessage('Successfully authenticated! Access tokens encrypted and stored securely.');
+          setPagesCount(res.data.pagesCount || res.data.accessibleCustomersCount || null);
+          setMessage(
+            targetPlatform === 'GOOGLE'
+              ? `Successfully connected Google Ads MCC! Discovered ${res.data.accessibleCustomers?.length || 0} customer account(s).`
+              : 'Successfully authenticated! Access tokens encrypted and stored securely.',
+          );
           setTimeout(() => {
             router.push('/integrations');
           }, 2500);

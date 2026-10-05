@@ -158,9 +158,10 @@ export class IntegrationsService {
         const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID;
         if (!clientId) throw new BadRequestException('GOOGLE_OAUTH_CLIENT_ID is not configured');
         const scopes = encodeURIComponent('https://www.googleapis.com/auth/adwords');
+        const statePayload = Buffer.from(JSON.stringify({ platform: PlatformType.GOOGLE, organizationId })).toString('base64');
         const url = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(
           redirectUri,
-        )}&response_type=code&scope=${scopes}&access_type=offline&prompt=consent`;
+        )}&response_type=code&scope=${scopes}&access_type=offline&prompt=consent&state=${statePayload}`;
         return { platform, url };
       }
       case PlatformType.LINKEDIN: {
