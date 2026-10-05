@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     region: oregon
-    buildCommand: npm install && npm run build:shared && npm run db:generate && npm run build:api
+    buildCommand: npm install --include=dev && npm run build:shared && npm run db:generate && npm run build:api
     startCommand: npm run start:prod --workspace=apps/api
     healthCheckPath: /api/v1/health
     envVars:
