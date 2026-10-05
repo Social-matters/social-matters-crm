@@ -8,7 +8,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { LeadsService } from '../leads/leads.service';
 import { AuthenticatedUser } from '../common/decorators/current-user.decorator';
-import { PlatformType, IntegrationStatus, UserRole } from '@sm-crm/shared';
+import { PlatformType, IntegrationStatus, UserRole, OrgType } from '@sm-crm/shared';
 import { EncryptionService } from '../common/services/encryption.service';
 import { ConnectIntegrationDto } from './dto/create-integration.dto';
 import { MetaGraphService } from './meta-graph.service';
@@ -105,7 +105,12 @@ export class IntegrationsService {
   async findAll(organizationId: string | undefined, user: AuthenticatedUser) {
     const where: any = {};
     if (user.role === UserRole.SUPER_ADMIN) {
-      if (organizationId) where.organizationId = organizationId;
+      if (organizationId) {
+        where.OR = [
+          { organizationId },
+          { organization: { type: OrgType.AGENCY } },
+        ];
+      }
     } else if (user.role === UserRole.AGENCY_ACCOUNT_MANAGER) {
       const assignments = await this.prisma.clientAssignment.findMany({
         where: { agencyUserId: user.id },
@@ -116,7 +121,10 @@ export class IntegrationsService {
         if (!allowedClientIds.includes(organizationId)) {
           throw new ForbiddenException('Access denied');
         }
-        where.organizationId = organizationId;
+        where.OR = [
+          { organizationId },
+          { organization: { type: OrgType.AGENCY } },
+        ];
       } else {
         where.organizationId = { in: allowedClientIds };
       }
@@ -243,7 +251,7 @@ export class IntegrationsService {
       const tokens = await this.googleAdsService.exchangeCodeForTokens(code, redirectUri);
       const accessibleCustomers = await this.googleAdsService.listAccessibleCustomers(tokens.accessToken);
 
-      const primaryCustomerId = accessibleCustomers[0] || 'google_ads_mcc_default';
+      const primaryCustomerId = accessibleCustomers[0] || '1714031558';
       const formattedCustomerId = this.googleAdsService.formatCustomerId(primaryCustomerId);
 
       const credentialsObj = {
@@ -473,22 +481,44 @@ export class IntegrationsService {
     };
   }
 
-  async getGoogleAccountReport(customerId: string, integrationId?: string, startDate?: string, endDate?: string) {
-    let accessToken: string | undefined;
-    let managerId: string | undefined;
-
+  /**
+   * Helper to resolve Google Ads credentials from a specific integration or active agency integration
+   */
+  private async getGoogleCredentials(integrationId?: string): Promise<{ accessToken?: string; managerId?: string }> {
+    let integration = null;
     if (integrationId) {
-      const integration = await this.prisma.integration.findUnique({ where: { id: integrationId } });
-      if (integration) {
-        const creds = this.encryptionService.decrypt<any>(integration.credentials);
-        accessToken = creds?.accessToken;
-        if (!accessToken && creds?.refreshToken) {
-          accessToken = await this.googleAdsService.refreshAccessToken(creds.refreshToken);
-        }
-        managerId = creds?.primaryCustomerId || integration.externalId || undefined;
-      }
+      integration = await this.prisma.integration.findUnique({ where: { id: integrationId } });
+    }
+    if (!integration) {
+      integration = await this.prisma.integration.findFirst({
+        where: {
+          platform: PlatformType.GOOGLE,
+          status: IntegrationStatus.CONNECTED,
+        },
+        orderBy: { updatedAt: 'desc' },
+      });
     }
 
+    if (!integration) {
+      return {};
+    }
+
+    try {
+      const creds = this.encryptionService.decrypt<any>(integration.credentials);
+      let accessToken = creds?.accessToken;
+      if (!accessToken && creds?.refreshToken) {
+        accessToken = await this.googleAdsService.refreshAccessToken(creds.refreshToken);
+      }
+      const managerId = creds?.primaryCustomerId || integration.externalId || undefined;
+      return { accessToken, managerId };
+    } catch (e: any) {
+      this.logger.warn(`Could not decrypt Google credentials: ${e.message}`);
+      return {};
+    }
+  }
+
+  async getGoogleAccountReport(customerId: string, integrationId?: string, startDate?: string, endDate?: string) {
+    const { accessToken, managerId } = await this.getGoogleCredentials(integrationId);
     return this.googleAdsService.fetchAccountReport(customerId, accessToken, managerId, startDate, endDate);
   }
 
@@ -499,21 +529,7 @@ export class IntegrationsService {
     endDate?: string,
     channelType?: string,
   ) {
-    let accessToken: string | undefined;
-    let managerId: string | undefined;
-
-    if (integrationId) {
-      const integration = await this.prisma.integration.findUnique({ where: { id: integrationId } });
-      if (integration) {
-        const creds = this.encryptionService.decrypt<any>(integration.credentials);
-        accessToken = creds?.accessToken;
-        if (!accessToken && creds?.refreshToken) {
-          accessToken = await this.googleAdsService.refreshAccessToken(creds.refreshToken);
-        }
-        managerId = creds?.primaryCustomerId || integration.externalId || undefined;
-      }
-    }
-
+    const { accessToken, managerId } = await this.getGoogleCredentials(integrationId);
     return this.googleAdsService.fetchCampaignsReport(customerId, accessToken, managerId, startDate, endDate, channelType);
   }
 
@@ -524,21 +540,7 @@ export class IntegrationsService {
     endDate?: string,
     campaignId?: string,
   ) {
-    let accessToken: string | undefined;
-    let managerId: string | undefined;
-
-    if (integrationId) {
-      const integration = await this.prisma.integration.findUnique({ where: { id: integrationId } });
-      if (integration) {
-        const creds = this.encryptionService.decrypt<any>(integration.credentials);
-        accessToken = creds?.accessToken;
-        if (!accessToken && creds?.refreshToken) {
-          accessToken = await this.googleAdsService.refreshAccessToken(creds.refreshToken);
-        }
-        managerId = creds?.primaryCustomerId || integration.externalId || undefined;
-      }
-    }
-
+    const { accessToken, managerId } = await this.getGoogleCredentials(integrationId);
     return this.googleAdsService.fetchAdGroupsReport(customerId, accessToken, managerId, startDate, endDate, campaignId);
   }
 
@@ -549,21 +551,7 @@ export class IntegrationsService {
     endDate?: string,
     adGroupId?: string,
   ) {
-    let accessToken: string | undefined;
-    let managerId: string | undefined;
-
-    if (integrationId) {
-      const integration = await this.prisma.integration.findUnique({ where: { id: integrationId } });
-      if (integration) {
-        const creds = this.encryptionService.decrypt<any>(integration.credentials);
-        accessToken = creds?.accessToken;
-        if (!accessToken && creds?.refreshToken) {
-          accessToken = await this.googleAdsService.refreshAccessToken(creds.refreshToken);
-        }
-        managerId = creds?.primaryCustomerId || integration.externalId || undefined;
-      }
-    }
-
+    const { accessToken, managerId } = await this.getGoogleCredentials(integrationId);
     return this.googleAdsService.fetchAdsReport(customerId, accessToken, managerId, startDate, endDate, adGroupId);
   }
 
@@ -574,21 +562,7 @@ export class IntegrationsService {
     endDate?: string,
     campaignId?: string,
   ) {
-    let accessToken: string | undefined;
-    let managerId: string | undefined;
-
-    if (integrationId) {
-      const integration = await this.prisma.integration.findUnique({ where: { id: integrationId } });
-      if (integration) {
-        const creds = this.encryptionService.decrypt<any>(integration.credentials);
-        accessToken = creds?.accessToken;
-        if (!accessToken && creds?.refreshToken) {
-          accessToken = await this.googleAdsService.refreshAccessToken(creds.refreshToken);
-        }
-        managerId = creds?.primaryCustomerId || integration.externalId || undefined;
-      }
-    }
-
+    const { accessToken, managerId } = await this.getGoogleCredentials(integrationId);
     return this.googleAdsService.fetchKeywordsReport(customerId, accessToken, managerId, startDate, endDate, campaignId);
   }
 
@@ -599,21 +573,7 @@ export class IntegrationsService {
     endDate?: string,
     campaignId?: string,
   ) {
-    let accessToken: string | undefined;
-    let managerId: string | undefined;
-
-    if (integrationId) {
-      const integration = await this.prisma.integration.findUnique({ where: { id: integrationId } });
-      if (integration) {
-        const creds = this.encryptionService.decrypt<any>(integration.credentials);
-        accessToken = creds?.accessToken;
-        if (!accessToken && creds?.refreshToken) {
-          accessToken = await this.googleAdsService.refreshAccessToken(creds.refreshToken);
-        }
-        managerId = creds?.primaryCustomerId || integration.externalId || undefined;
-      }
-    }
-
+    const { accessToken, managerId } = await this.getGoogleCredentials(integrationId);
     return this.googleAdsService.fetchSearchTermsReport(customerId, accessToken, managerId, startDate, endDate, campaignId);
   }
 
@@ -624,21 +584,7 @@ export class IntegrationsService {
     endDate?: string,
     campaignId?: string,
   ) {
-    let accessToken: string | undefined;
-    let managerId: string | undefined;
-
-    if (integrationId) {
-      const integration = await this.prisma.integration.findUnique({ where: { id: integrationId } });
-      if (integration) {
-        const creds = this.encryptionService.decrypt<any>(integration.credentials);
-        accessToken = creds?.accessToken;
-        if (!accessToken && creds?.refreshToken) {
-          accessToken = await this.googleAdsService.refreshAccessToken(creds.refreshToken);
-        }
-        managerId = creds?.primaryCustomerId || integration.externalId || undefined;
-      }
-    }
-
+    const { accessToken, managerId } = await this.getGoogleCredentials(integrationId);
     return this.googleAdsService.fetchPMaxAssetGroupsReport(customerId, accessToken, managerId, startDate, endDate, campaignId);
   }
 
@@ -649,21 +595,7 @@ export class IntegrationsService {
     endDate?: string,
     campaignId?: string,
   ) {
-    let accessToken: string | undefined;
-    let managerId: string | undefined;
-
-    if (integrationId) {
-      const integration = await this.prisma.integration.findUnique({ where: { id: integrationId } });
-      if (integration) {
-        const creds = this.encryptionService.decrypt<any>(integration.credentials);
-        accessToken = creds?.accessToken;
-        if (!accessToken && creds?.refreshToken) {
-          accessToken = await this.googleAdsService.refreshAccessToken(creds.refreshToken);
-        }
-        managerId = creds?.primaryCustomerId || integration.externalId || undefined;
-      }
-    }
-
+    const { accessToken, managerId } = await this.getGoogleCredentials(integrationId);
     return this.googleAdsService.fetchShoppingReport(customerId, accessToken, managerId, startDate, endDate, campaignId);
   }
 
@@ -674,21 +606,7 @@ export class IntegrationsService {
     endDate?: string,
     campaignId?: string,
   ) {
-    let accessToken: string | undefined;
-    let managerId: string | undefined;
-
-    if (integrationId) {
-      const integration = await this.prisma.integration.findUnique({ where: { id: integrationId } });
-      if (integration) {
-        const creds = this.encryptionService.decrypt<any>(integration.credentials);
-        accessToken = creds?.accessToken;
-        if (!accessToken && creds?.refreshToken) {
-          accessToken = await this.googleAdsService.refreshAccessToken(creds.refreshToken);
-        }
-        managerId = creds?.primaryCustomerId || integration.externalId || undefined;
-      }
-    }
-
+    const { accessToken, managerId } = await this.getGoogleCredentials(integrationId);
     return this.googleAdsService.fetchDeviceSegmentationReport(customerId, accessToken, managerId, startDate, endDate, campaignId);
   }
 

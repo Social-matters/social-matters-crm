@@ -359,14 +359,14 @@ export class GoogleAdsService {
 
       const data = await res.json();
       if (!res.ok || data.error) {
-        this.logger.warn(`Could not list accessible customers via Google Ads API: ${JSON.stringify(data?.error)}`);
-        return ['1111111111', '2222222222', '3333333333']; // High-fidelity accessible test accounts
+        this.logger.warn(`Google Ads API listAccessibleCustomers error: ${JSON.stringify(data?.error || data)}`);
+        return [];
       }
 
       return (data.resourceNames || []).map((rn: string) => rn.replace('customers/', ''));
     } catch (err: any) {
       this.logger.warn(`listAccessibleCustomers network error: ${err.message}`);
-      return ['1111111111', '2222222222'];
+      return [];
     }
   }
 
@@ -409,35 +409,7 @@ export class GoogleAdsService {
       }
     }
 
-    if (accounts.length > 0) return accounts;
-
-    // High-fidelity fallback accounts for development / verified staging
-    return [
-      {
-        customerId: '1111111111',
-        descriptiveName: 'Aura Fine Jewelry',
-        isManager: false,
-        currencyCode: 'INR',
-        timeZone: 'Asia/Kolkata',
-        managerCustomerId: cleanManagerId,
-      },
-      {
-        customerId: '2222222222',
-        descriptiveName: 'Zenith Real Estate',
-        isManager: false,
-        currencyCode: 'INR',
-        timeZone: 'Asia/Kolkata',
-        managerCustomerId: cleanManagerId,
-      },
-      {
-        customerId: '3333333333',
-        descriptiveName: 'ABC Fashion Global',
-        isManager: false,
-        currencyCode: 'USD',
-        timeZone: 'America/New_York',
-        managerCustomerId: cleanManagerId,
-      },
-    ];
+    return accounts;
   }
 
   /**
@@ -519,31 +491,24 @@ export class GoogleAdsService {
       };
     }
 
-    // High-fidelity fallback adhering to client isolation
-    const isAura = cleanId === '1111111111';
-    const spend = isAura ? 148500 : 234000;
-    const impressions = isAura ? 485000 : 892000;
-    const clicks = isAura ? 18600 : 34100;
-    const conversions = isAura ? 512 : 728;
-    const conversionValue = isAura ? 890000 : 1850000;
-
+    // No metrics recorded for this period/account
     return {
       customerId: cleanId,
       formattedCustomerId: this.formatCustomerId(cleanId),
-      accountName: isAura ? 'Aura Fine Jewelry - Official Google Ads' : 'Zenith Real Estate - Growth Campaigns',
+      accountName: `Google Ads Account #${cleanId}`,
       currencyCode: 'INR',
       timeZone: 'Asia/Kolkata',
       status: 'ENABLED',
-      spend,
-      impressions,
-      clicks,
-      ctr: Math.round((clicks / impressions) * 10000) / 100,
-      cpc: Math.round((spend / clicks) * 100) / 100,
-      cpm: Math.round((spend / impressions) * 1000 * 100) / 100,
-      conversions,
-      conversionValue,
-      costPerConversion: Math.round((spend / conversions) * 100) / 100,
-      roas: Math.round((conversionValue / spend) * 100) / 100,
+      spend: 0,
+      impressions: 0,
+      clicks: 0,
+      ctr: 0,
+      cpc: 0,
+      cpm: 0,
+      conversions: 0,
+      conversionValue: 0,
+      costPerConversion: 0,
+      roas: 0,
     };
   }
 
@@ -621,178 +586,7 @@ export class GoogleAdsService {
       return items;
     }
 
-    // High-fidelity multi-campaign fallback across Search, PMax, Shopping, Display, Demand Gen, Video
-    const isAura = cleanId === '1111111111';
-    const sampleCampaigns: GoogleCampaignReportItem[] = isAura
-      ? [
-          {
-            campaignId: '555001',
-            campaignName: 'Aura - High Intent Solitaire Search',
-            channelType: 'SEARCH',
-            status: 'ENABLED',
-            budget: 2500,
-            biddingStrategy: 'TARGET_CPA',
-            spend: 52400,
-            impressions: 124000,
-            clicks: 6420,
-            ctr: 5.18,
-            cpc: 8.16,
-            cpm: 422.58,
-            conversions: 245,
-            conversionRate: 3.82,
-            costPerConversion: 213.88,
-            conversionValue: 345000,
-            roas: 6.58,
-            customerId: cleanId,
-          },
-          {
-            campaignId: '555002',
-            campaignName: 'Aura - Performance Max All Products',
-            channelType: 'PERFORMANCE_MAX',
-            status: 'ENABLED',
-            budget: 3500,
-            biddingStrategy: 'TARGET_ROAS',
-            spend: 44100,
-            impressions: 198000,
-            clicks: 7200,
-            ctr: 3.64,
-            cpc: 6.13,
-            cpm: 222.73,
-            conversions: 182,
-            conversionRate: 2.53,
-            costPerConversion: 242.31,
-            conversionValue: 382000,
-            roas: 8.66,
-            customerId: cleanId,
-          },
-          {
-            campaignId: '555003',
-            campaignName: 'Aura - Luxury Jewelry Smart Shopping',
-            channelType: 'SHOPPING',
-            status: 'ENABLED',
-            budget: 1500,
-            biddingStrategy: 'MAXIMIZE_CONVERSION_VALUE',
-            spend: 28400,
-            impressions: 89000,
-            clicks: 2980,
-            ctr: 3.35,
-            cpc: 9.53,
-            cpm: 319.1,
-            conversions: 62,
-            conversionRate: 2.08,
-            costPerConversion: 458.06,
-            conversionValue: 124000,
-            roas: 4.37,
-            customerId: cleanId,
-          },
-          {
-            campaignId: '555004',
-            campaignName: 'Aura - Bridal Engagement Display Retargeting',
-            channelType: 'DISPLAY',
-            status: 'ENABLED',
-            budget: 800,
-            biddingStrategy: 'TARGET_CPA',
-            spend: 14200,
-            impressions: 54000,
-            clicks: 1240,
-            ctr: 2.3,
-            cpc: 11.45,
-            cpm: 262.96,
-            conversions: 18,
-            conversionRate: 1.45,
-            costPerConversion: 788.89,
-            conversionValue: 28000,
-            roas: 1.97,
-            customerId: cleanId,
-          },
-          {
-            campaignId: '555005',
-            campaignName: 'Aura - Festive Season Demand Gen / YouTube',
-            channelType: 'DEMAND_GEN',
-            status: 'PAUSED',
-            budget: 1200,
-            biddingStrategy: 'MAXIMIZE_CONVERSIONS',
-            spend: 9400,
-            impressions: 20000,
-            clicks: 760,
-            ctr: 3.8,
-            cpc: 12.37,
-            cpm: 470.0,
-            conversions: 5,
-            conversionRate: 0.66,
-            costPerConversion: 1880.0,
-            conversionValue: 11000,
-            roas: 1.17,
-            customerId: cleanId,
-          },
-        ]
-      : [
-          {
-            campaignId: '666001',
-            campaignName: 'Zenith - Luxury Sky Villas Search',
-            channelType: 'SEARCH',
-            status: 'ENABLED',
-            budget: 5000,
-            biddingStrategy: 'TARGET_CPA',
-            spend: 112000,
-            impressions: 284000,
-            clicks: 12500,
-            ctr: 4.4,
-            cpc: 8.96,
-            cpm: 394.37,
-            conversions: 384,
-            conversionRate: 3.07,
-            costPerConversion: 291.67,
-            conversionValue: 920000,
-            roas: 8.21,
-            customerId: cleanId,
-          },
-          {
-            campaignId: '666002',
-            campaignName: 'Zenith - Performance Max Ultra HNI Investors',
-            channelType: 'PERFORMANCE_MAX',
-            status: 'ENABLED',
-            budget: 6000,
-            biddingStrategy: 'TARGET_ROAS',
-            spend: 88500,
-            impressions: 412000,
-            clicks: 15400,
-            ctr: 3.74,
-            cpc: 5.75,
-            cpm: 214.81,
-            conversions: 268,
-            conversionRate: 1.74,
-            costPerConversion: 330.22,
-            conversionValue: 780000,
-            roas: 8.81,
-            customerId: cleanId,
-          },
-          {
-            campaignId: '666003',
-            campaignName: 'Zenith - Architectural Walkthrough YouTube Video',
-            channelType: 'VIDEO',
-            status: 'ENABLED',
-            budget: 2000,
-            biddingStrategy: 'TARGET_CPV',
-            spend: 33500,
-            impressions: 196000,
-            clicks: 6200,
-            ctr: 3.16,
-            cpc: 5.4,
-            cpm: 170.92,
-            conversions: 76,
-            conversionRate: 1.23,
-            costPerConversion: 440.79,
-            conversionValue: 150000,
-            roas: 4.48,
-            customerId: cleanId,
-          },
-        ];
-
-    if (channelType && channelType !== 'ALL') {
-      return sampleCampaigns.filter((c) => c.channelType.toUpperCase() === channelType.toUpperCase());
-    }
-    return sampleCampaigns;
+    return [];
   }
 
   /**
@@ -874,77 +668,7 @@ export class GoogleAdsService {
       });
     }
 
-    // High-fidelity fallback for Ad Groups
-    const isAura = cleanId === '1111111111';
-    return isAura
-      ? [
-          {
-            adGroupId: 'ag_aura_101',
-            adGroupName: 'Solitaire Rings - Exact Intent',
-            campaignId: '555001',
-            campaignName: 'Aura - High Intent Solitaire Search',
-            type: 'SEARCH_STANDARD',
-            status: 'ENABLED',
-            spend: 32000,
-            impressions: 74000,
-            clicks: 4100,
-            ctr: 5.54,
-            cpc: 7.8,
-            conversions: 165,
-            conversionValue: 245000,
-            roas: 7.66,
-          },
-          {
-            adGroupId: 'ag_aura_102',
-            adGroupName: 'Diamond Bridal Sets - Phrase Match',
-            campaignId: '555001',
-            campaignName: 'Aura - High Intent Solitaire Search',
-            type: 'SEARCH_STANDARD',
-            status: 'ENABLED',
-            spend: 20400,
-            impressions: 50000,
-            clicks: 2320,
-            ctr: 4.64,
-            cpc: 8.79,
-            conversions: 80,
-            conversionValue: 100000,
-            roas: 4.9,
-          },
-        ]
-      : [
-          {
-            adGroupId: 'ag_zenith_201',
-            adGroupName: '4BHK Penthouse Sea View Queries',
-            campaignId: '666001',
-            campaignName: 'Zenith - Luxury Sky Villas Search',
-            type: 'SEARCH_STANDARD',
-            status: 'ENABLED',
-            spend: 68000,
-            impressions: 172000,
-            clicks: 7600,
-            ctr: 4.42,
-            cpc: 8.95,
-            conversions: 240,
-            conversionValue: 580000,
-            roas: 8.53,
-          },
-          {
-            adGroupId: 'ag_zenith_202',
-            adGroupName: 'Golf Course Facing Duplex Villas',
-            campaignId: '666001',
-            campaignName: 'Zenith - Luxury Sky Villas Search',
-            type: 'SEARCH_STANDARD',
-            status: 'ENABLED',
-            spend: 44000,
-            impressions: 112000,
-            clicks: 4900,
-            ctr: 4.38,
-            cpc: 8.98,
-            conversions: 144,
-            conversionValue: 340000,
-            roas: 7.73,
-          },
-        ];
+    return [];
   }
 
   /**
@@ -1015,57 +739,7 @@ export class GoogleAdsService {
       });
     }
 
-    const isAura = cleanId === '1111111111';
-    return isAura
-      ? [
-          {
-            adId: 'ad_aura_301',
-            adName: 'Certified Natural Solitaire Diamonds - Free Consultation',
-            adType: 'RESPONSIVE_SEARCH_AD',
-            status: 'ENABLED',
-            adGroupId: 'ag_aura_101',
-            campaignId: '555001',
-            spend: 18400,
-            impressions: 42000,
-            clicks: 2450,
-            ctr: 5.83,
-            cpc: 7.51,
-            conversions: 105,
-            conversionValue: 165000,
-          },
-          {
-            adId: 'ad_aura_302',
-            adName: 'Handcrafted Platinum & Rose Gold Solitaires',
-            adType: 'RESPONSIVE_SEARCH_AD',
-            status: 'ENABLED',
-            adGroupId: 'ag_aura_101',
-            campaignId: '555001',
-            spend: 13600,
-            impressions: 32000,
-            clicks: 1650,
-            ctr: 5.16,
-            cpc: 8.24,
-            conversions: 60,
-            conversionValue: 80000,
-          },
-        ]
-      : [
-          {
-            adId: 'ad_zenith_401',
-            adName: 'Sky Villas Overlooking Marine Drive - Private Deck & Pool',
-            adType: 'RESPONSIVE_SEARCH_AD',
-            status: 'ENABLED',
-            adGroupId: 'ag_zenith_201',
-            campaignId: '666001',
-            spend: 42000,
-            impressions: 104000,
-            clicks: 4800,
-            ctr: 4.62,
-            cpc: 8.75,
-            conversions: 155,
-            conversionValue: 390000,
-          },
-        ];
+    return [];
   }
 
   /**
@@ -1136,82 +810,7 @@ export class GoogleAdsService {
       });
     }
 
-    const isAura = cleanId === '1111111111';
-    return isAura
-      ? [
-          {
-            criterionId: 'kw_101',
-            keywordText: 'solitaire diamond ring price',
-            matchType: 'EXACT',
-            status: 'ENABLED',
-            campaignId: '555001',
-            spend: 14200,
-            impressions: 34000,
-            clicks: 1950,
-            ctr: 5.74,
-            cpc: 7.28,
-            conversions: 84,
-            conversionValue: 125000,
-          },
-          {
-            criterionId: 'kw_102',
-            keywordText: 'best bridal diamond jewellers near me',
-            matchType: 'PHRASE',
-            status: 'ENABLED',
-            campaignId: '555001',
-            spend: 11800,
-            impressions: 26000,
-            clicks: 1420,
-            ctr: 5.46,
-            cpc: 8.31,
-            conversions: 55,
-            conversionValue: 88000,
-          },
-          {
-            criterionId: 'kw_103',
-            keywordText: 'platinum engagement ring bands',
-            matchType: 'BROAD',
-            status: 'ENABLED',
-            campaignId: '555001',
-            spend: 6000,
-            impressions: 14000,
-            clicks: 730,
-            ctr: 5.21,
-            cpc: 8.22,
-            conversions: 26,
-            conversionValue: 32000,
-          },
-        ]
-      : [
-          {
-            criterionId: 'kw_201',
-            keywordText: 'luxury 4 bhk penthouse mumbai',
-            matchType: 'EXACT',
-            status: 'ENABLED',
-            campaignId: '666001',
-            spend: 38000,
-            impressions: 92000,
-            clicks: 4400,
-            ctr: 4.78,
-            cpc: 8.64,
-            conversions: 145,
-            conversionValue: 380000,
-          },
-          {
-            criterionId: 'kw_202',
-            keywordText: 'gated villa community with private pool',
-            matchType: 'PHRASE',
-            status: 'ENABLED',
-            campaignId: '666001',
-            spend: 30000,
-            impressions: 80000,
-            clicks: 3200,
-            ctr: 4.0,
-            cpc: 9.38,
-            conversions: 95,
-            conversionValue: 200000,
-          },
-        ];
+    return [];
   }
 
   /**
@@ -1275,45 +874,7 @@ export class GoogleAdsService {
       });
     }
 
-    const isAura = cleanId === '1111111111';
-    return isAura
-      ? [
-          {
-            searchTerm: '1 carat solitaire ring price in mumbai',
-            status: 'ADDED',
-            campaignId: '555001',
-            spend: 6400,
-            impressions: 12000,
-            clicks: 820,
-            ctr: 6.83,
-            conversions: 38,
-            conversionValue: 62000,
-          },
-          {
-            searchTerm: 'custom engagement ring design store bandra',
-            status: 'NONE',
-            campaignId: '555001',
-            spend: 4100,
-            impressions: 8400,
-            clicks: 510,
-            ctr: 6.07,
-            conversions: 24,
-            conversionValue: 41000,
-          },
-        ]
-      : [
-          {
-            searchTerm: 'sea view apartments south mumbai buy',
-            status: 'ADDED',
-            campaignId: '666001',
-            spend: 18000,
-            impressions: 44000,
-            clicks: 2100,
-            ctr: 4.77,
-            conversions: 78,
-            conversionValue: 190000,
-          },
-        ];
+    return [];
   }
 
   /**
@@ -1374,45 +935,7 @@ export class GoogleAdsService {
       });
     }
 
-    const isAura = cleanId === '1111111111';
-    return isAura
-      ? [
-          {
-            assetGroupId: 'ag_pmax_aura_01',
-            assetGroupName: 'Bridal Solitaire Showcase (Images + Short Videos)',
-            campaignId: '555002',
-            status: 'ENABLED',
-            spend: 26000,
-            impressions: 118000,
-            clicks: 4400,
-            conversions: 114,
-            conversionValue: 242000,
-          },
-          {
-            assetGroupId: 'ag_pmax_aura_02',
-            assetGroupName: 'Fine Everyday Diamonds Lifestyle Assets',
-            campaignId: '555002',
-            status: 'ENABLED',
-            spend: 18100,
-            impressions: 80000,
-            clicks: 2800,
-            conversions: 68,
-            conversionValue: 140000,
-          },
-        ]
-      : [
-          {
-            assetGroupId: 'ag_pmax_zenith_01',
-            assetGroupName: 'Drone Cinematic 3D Sky Villas Tour',
-            campaignId: '666002',
-            status: 'ENABLED',
-            spend: 54000,
-            impressions: 254000,
-            clicks: 9800,
-            conversions: 172,
-            conversionValue: 490000,
-          },
-        ];
+    return [];
   }
 
   /**
@@ -1473,33 +996,7 @@ export class GoogleAdsService {
       });
     }
 
-    const isAura = cleanId === '1111111111';
-    return isAura
-      ? [
-          {
-            productItemId: 'AURA_RING_001',
-            productTitle: '1.5ct Round Brilliant Solitaire Platinum Ring',
-            productTypeL1: 'Fine Jewelry > Rings',
-            campaignId: '555003',
-            spend: 14800,
-            impressions: 46000,
-            clicks: 1620,
-            conversions: 35,
-            conversionValue: 78000,
-          },
-          {
-            productItemId: 'AURA_BAND_002',
-            productTitle: 'Eternity Diamond Wedding Band 18k White Gold',
-            productTypeL1: 'Fine Jewelry > Bands',
-            campaignId: '555003',
-            spend: 13600,
-            impressions: 43000,
-            clicks: 1360,
-            conversions: 27,
-            conversionValue: 46000,
-          },
-        ]
-      : [];
+    return [];
   }
 
   /**
@@ -1558,52 +1055,7 @@ export class GoogleAdsService {
       });
     }
 
-    const isAura = cleanId === '1111111111';
-    return isAura
-      ? [
-          {
-            campaignId: '555001',
-            device: 'MOBILE',
-            network: 'SEARCH',
-            spend: 34000,
-            impressions: 82000,
-            clicks: 4300,
-            conversions: 165,
-            conversionValue: 230000,
-          },
-          {
-            campaignId: '555001',
-            device: 'DESKTOP',
-            network: 'SEARCH',
-            spend: 18400,
-            impressions: 42000,
-            clicks: 2120,
-            conversions: 80,
-            conversionValue: 115000,
-          },
-        ]
-      : [
-          {
-            campaignId: '666001',
-            device: 'MOBILE',
-            network: 'SEARCH',
-            spend: 68000,
-            impressions: 178000,
-            clicks: 7800,
-            conversions: 245,
-            conversionValue: 580000,
-          },
-          {
-            campaignId: '666001',
-            device: 'DESKTOP',
-            network: 'SEARCH',
-            spend: 44000,
-            impressions: 106000,
-            clicks: 4700,
-            conversions: 139,
-            conversionValue: 340000,
-          },
-        ];
+    return [];
   }
 
   /**
@@ -1625,13 +1077,31 @@ export class GoogleAdsService {
     const cleanCustomerId = this.normalizeCustomerId(customerId);
     const syncStartedAt = new Date();
 
-    // 1. Resolve Integration
-    const integration = await this.prisma.integration.findFirst({
+    // 1. Verify Organization exists
+    const org = await this.prisma.organization.findUnique({
+      where: { id: organizationId },
+    });
+    if (!org) {
+      throw new NotFoundException(`Organization with ID ${organizationId} not found in database.`);
+    }
+
+    // 2. Resolve Integration (workspace-specific first, then Master Agency Google connection)
+    let integration = await this.prisma.integration.findFirst({
       where: {
         organizationId,
         platform: PlatformType.GOOGLE,
       },
     });
+
+    if (!integration) {
+      integration = await this.prisma.integration.findFirst({
+        where: {
+          platform: PlatformType.GOOGLE,
+          status: IntegrationStatus.CONNECTED,
+        },
+        orderBy: { updatedAt: 'desc' },
+      });
+    }
 
     let accessToken: string | undefined;
     if (integration) {
@@ -1642,7 +1112,7 @@ export class GoogleAdsService {
           accessToken = await this.refreshAccessToken(creds.refreshToken);
         }
       } catch (e: any) {
-        this.logger.warn(`Could not decrypt or refresh Google credentials for org ${organizationId}: ${e.message}`);
+        this.logger.warn(`Could not decrypt or refresh Google credentials: ${e.message}`);
       }
     }
 

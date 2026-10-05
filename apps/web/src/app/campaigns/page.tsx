@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { DashboardShell } from '../../components/layout/dashboard-shell';
 import { useAuth } from '../../context/auth-context';
 import api from '../../lib/api';
@@ -56,7 +56,7 @@ export default function CampaignsPage() {
   const [selectedPlatform, setSelectedPlatform] = useState<string>('GOOGLE');
 
   // Google Ads Full Reporting States
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('1111111111');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
   const [accountReport, setAccountReport] = useState<any>(null);
   const [googleCampaigns, setGoogleCampaigns] = useState<any[]>([]);
   const [googleAdGroups, setGoogleAdGroups] = useState<any[]>([]);
@@ -77,31 +77,31 @@ export default function CampaignsPage() {
   const [dateRange, setDateRange] = useState<string>('30d');
   const [expandedCampaigns, setExpandedCampaigns] = useState<Record<string, boolean>>({});
 
-  // Client to Google Customer mapping
-  const clientCustomerAccounts = [
-    {
-      orgId: '9076ed25-c0dc-4173-959a-f2d704f8db7a',
-      orgName: 'Aura Fine Jewelry',
-      customerId: '1111111111',
-      formattedId: '111-222-3333',
-    },
-    {
-      orgId: '89219520-0992-4823-8981-1476aaef803e',
-      orgName: 'Zenith Real Estate',
-      customerId: '2222222222',
-      formattedId: '222-333-4444',
-    },
-  ];
+  // Dynamic Client to Google Customer mapping from real client workspaces
+  const clientCustomerAccounts = useMemo(() => {
+    return availableClients
+      .filter((c: any) => c.settings?.googleAdsCustomerId)
+      .map((c: any) => ({
+        orgId: c.id,
+        orgName: c.name,
+        customerId: c.settings.googleAdsCustomerId as string,
+        formattedId: (c.settings.googleAdsFormattedId || c.settings.googleAdsCustomerId) as string,
+      }));
+  }, [availableClients]);
 
-  // Sync selectedCustomerId when active client changes
+  // Sync selectedCustomerId when active client or client list changes
   useEffect(() => {
-    if (activeClient?.id) {
-      const match = clientCustomerAccounts.find((c) => c.orgId === activeClient.id);
+    if (activeClient) {
+      const match = (activeClient as any).settings?.googleAdsCustomerId;
       if (match) {
-        setSelectedCustomerId(match.customerId);
+        setSelectedCustomerId(match);
+      } else if (clientCustomerAccounts.length > 0 && (!selectedCustomerId || !clientCustomerAccounts.some(c => c.customerId === selectedCustomerId))) {
+        setSelectedCustomerId(clientCustomerAccounts[0].customerId);
       }
+    } else if (clientCustomerAccounts.length > 0 && !selectedCustomerId) {
+      setSelectedCustomerId(clientCustomerAccounts[0].customerId);
     }
-  }, [activeClient]);
+  }, [activeClient, clientCustomerAccounts]);
 
   const fetchCrmData = async () => {
     setLoading(true);
@@ -177,11 +177,18 @@ export default function CampaignsPage() {
     setSyncSuccessMsg(null);
     try {
       const match = clientCustomerAccounts.find((c) => c.customerId === selectedCustomerId);
-      const orgId = match ? match.orgId : activeClient?.id;
+      const targetOrg = match ? availableClients.find((c) => c.id === match.orgId) : activeClient;
+      const orgId = targetOrg?.id || activeClient?.id;
+
+      if (!orgId) {
+        alert('Please select an active client workspace before initiating synchronization.');
+        return;
+      }
+
       const res = await api.post('/integrations/google/sync', {
         organizationId: orgId,
         customerId: selectedCustomerId,
-        managerCustomerId: '9821405921',
+        managerCustomerId: (targetOrg as any)?.settings?.mccManagerId || '1714031558',
         syncType: 'FULL',
       });
       if (res.data?.success) {
@@ -190,7 +197,7 @@ export default function CampaignsPage() {
         await Promise.all([fetchGoogleAdsReporting(), fetchCrmData()]);
       }
     } catch (err: any) {
-      alert(err.message || 'Failed to sync Google Ads account');
+      alert(err.response?.data?.message || err.message || 'Failed to sync Google Ads account');
     } finally {
       setSyncingGoogle(false);
     }
@@ -266,14 +273,24 @@ export default function CampaignsPage() {
               <Globe className="w-3.5 h-3.5 text-blue-600" />
               <select
                 value={selectedCustomerId}
-                onChange={(e) => setSelectedCustomerId(e.target.value)}
+                onChange={(e) => {
+                  setSelectedCustomerId(e.target.value);
+                  const matchedClient = availableClients.find((c: any) => c.settings?.googleAdsCustomerId === e.target.value);
+                  if (matchedClient) setActiveClient(matchedClient);
+                }}
                 className="bg-transparent font-mono font-semibold text-slate-800 focus:outline-none"
               >
-                {clientCustomerAccounts.map((acc) => (
-                  <option key={acc.customerId} value={acc.customerId}>
-                    {acc.orgName} ({acc.formattedId})
+                {clientCustomerAccounts.length > 0 ? (
+                  clientCustomerAccounts.map((acc) => (
+                    <option key={acc.customerId} value={acc.customerId}>
+                      {acc.orgName} ({acc.formattedId})
+                    </option>
+                  ))
+                ) : (
+                  <option value={selectedCustomerId || '1714031558'}>
+                    {activeClient?.name || 'Manager MCC'} (171-403-1558)
                   </option>
-                ))}
+                )}
               </select>
             </div>
 

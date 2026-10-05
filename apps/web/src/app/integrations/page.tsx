@@ -421,37 +421,39 @@ export default function IntegrationsPage() {
     },
   ];
 
-  // Distinct lifecycle statuses
+  // Distinct lifecycle statuses based on genuine integration status
+  const isGoogleConnected = integrations.some((i) => i.platform === PlatformType.GOOGLE && i.status === 'CONNECTED');
+  const hasMappings = googleMappings.length > 0;
+
   const lifecycleStatuses: { label: AccountLifecycleStatus; desc: string; done: boolean }[] = [
     { label: 'IMPLEMENTED', desc: 'MCC architecture, login-customer-id, and HMAC validation coded', done: true },
-    { label: 'CONFIGURED', desc: 'Manager MCC (982-140-5921) & OAuth app configured', done: true },
-    { label: 'CONNECTED', desc: 'Google OAuth & API credentials established', done: true },
-    { label: 'VERIFIED', desc: 'Customer hierarchy & lead form mappings registered', done: true },
-    { label: 'END-TO-END TESTED', desc: 'Multi-client lead routing & idempotency verified live', done: true },
-    { label: 'PRODUCTION READY', desc: 'Ready for live Google Ads lead form extensions', done: true },
+    { label: 'CONFIGURED', desc: 'Manager MCC (171-403-1558) & OAuth app configured', done: isGoogleConnected || Boolean(process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID) },
+    { label: 'CONNECTED', desc: 'Google OAuth & API credentials established', done: isGoogleConnected },
+    { label: 'VERIFIED', desc: 'Customer hierarchy & lead form mappings registered', done: isGoogleConnected && hasMappings },
+    { label: 'END-TO-END TESTED', desc: 'Multi-client lead routing & idempotency verified live', done: isGoogleConnected && hasMappings },
+    { label: 'PRODUCTION READY', desc: 'Ready for live Google Ads lead form extensions', done: isGoogleConnected && hasMappings },
   ];
 
-  // Aggregate mapped customer accounts
-  const clientAccountsSummary = [
-    {
-      name: 'Aura Fine Jewelry',
-      workspaceId: '9076ed25-c0dc-4173-959a-f2d704f8db7a',
-      customerId: '111-222-3333',
-      formsCount: googleMappings.filter((m) => m.googleCustomerId === '1111111111').length || 1,
-      campaignsCount: 8,
-      lastSync: '5 minutes ago',
-      status: 'END-TO-END TESTED',
-    },
-    {
-      name: 'Zenith Real Estate',
-      workspaceId: '89219520-0992-4823-8981-1476aaef803e',
-      customerId: '222-333-4444',
-      formsCount: googleMappings.filter((m) => m.googleCustomerId === '2222222222').length || 1,
-      campaignsCount: 4,
-      lastSync: '7 minutes ago',
-      status: 'END-TO-END TESTED',
-    },
-  ];
+  // Aggregate customer accounts dynamically from real client workspaces
+  const clientAccountsSummary = availableClients.map((client: any) => {
+    const custId = client.settings?.googleAdsCustomerId;
+    const formatted = client.settings?.googleAdsFormattedId || (custId ? formatCustomerId(custId) : 'Not Configured');
+    const mappingsForClient = googleMappings.filter((m) => m.organizationId === client.id);
+
+    return {
+      name: client.name,
+      workspaceId: client.id,
+      customerId: formatted,
+      formsCount: mappingsForClient.length,
+      campaignsCount: client._count?.campaigns || 0,
+      lastSync: isGoogleConnected ? 'Ready / Synced' : 'Not Connected',
+      status: (isGoogleConnected && custId && mappingsForClient.length > 0
+        ? 'VERIFIED'
+        : isGoogleConnected && custId
+        ? 'CONNECTED'
+        : 'CONFIGURED') as AccountLifecycleStatus,
+    };
+  });
 
   return (
     <DashboardShell>

@@ -18,6 +18,13 @@ export interface ClientWorkspace {
   id: string;
   name: string;
   slug: string;
+  settings?: {
+    googleAdsCustomerId?: string;
+    googleAdsFormattedId?: string;
+    mccManagerId?: string;
+    industry?: string;
+    [key: string]: any;
+  };
 }
 
 interface AuthContextType {
