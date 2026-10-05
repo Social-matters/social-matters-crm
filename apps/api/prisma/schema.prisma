@@ -1,0 +1,631 @@
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum OrgType {
+  AGENCY
+  CLIENT
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  AGENCY_ACCOUNT_MANAGER
+  CLIENT_ADMIN
+  CLIENT_SALES_USER
+  CUSTOM
+}
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  INTERESTED
+  FOLLOW_UP
+  CONVERTED
+  LOST
+}
+
+enum FollowUpStatus {
+  PENDING
+  COMPLETED
+  OVERDUE
+}
+
+enum PlatformType {
+  META
+  GOOGLE
+  LINKEDIN
+  WHATSAPP
+  WEBSITE
+  MANUAL
+}
+
+enum IntegrationStatus {
+  CONNECTED
+  SYNCING
+  ERROR
+  DISCONNECTED
+}
+
+// ---------------------------------------------
+// 1. ORGANIZATIONS & TENANTS
+// ---------------------------------------------
+model Organization {
+  id              String         @id @default(uuid())
+  name            String
+  slug            String         @unique
+  type            OrgType        @default(CLIENT)
+  isActive        Boolean        @default(true)
+  settings        Json?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  users           User[]
+  assignedAgents  ClientAssignment[]
+  contacts        Contact[]
+  leads           Lead[]
+  campaigns       Campaign[]
+  integrations    Integration[]
+  forms           Form[]
+  notifications   Notification[]
+  auditLogs       AuditLog[]
+  webhookEvents   IngestedWebhookEvent[]
+  googleLeadFormMappings GoogleLeadFormMapping[]
+  googleKeywordMetrics   GoogleKeywordMetric[]
+  googleSearchTermMetrics GoogleSearchTermMetric[]
+  googleAssetGroupMetrics GoogleAssetGroupMetric[]
+
+  @@map("organizations")
+}
+
+// ---------------------------------------------
+// 2. USERS, ROLES & PERMISSIONS
+// ---------------------------------------------
+model User {
+  id               String             @id @default(uuid())
+  organizationId   String
+  name             String
+  email            String             @unique
+  phone            String?
+  passwordHash     String
+  role             UserRole           @default(CLIENT_SALES_USER)
+  customRoleId     String?
+  isActive         Boolean            @default(true)
+  lastLoginAt      DateTime?
+  refreshTokenHash String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  organization     Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customRole       Role?              @relation(fields: [customRoleId], references: [id])
+  clientAssignments ClientAssignment[]
+  assignedLeads    Lead[]             @relation("AssignedSalesUser")
+  notes            LeadNote[]
+  statusChanges    LeadStatusHistory[]
+  followUps        FollowUp[]
+  conversions      Conversion[]
+  notifications    Notification[]
+  auditLogs        AuditLog[]
+
+  @@index([organizationId])
+  @@map("users")
+}
+
+model Role {
+  id              String           @id @default(uuid())
+  name            String
+  description     String?
+  isSystem        Boolean          @default(false)
+  permissions     RolePermission[]
+  users           User[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  @@map("roles")
+}
+
+model Permission {
+  id              String           @id @default(uuid())
+  action          String           @unique
+  description     String?
+  roles           RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId        String
+  permissionId  String
+
+  role          Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission    Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model ClientAssignment {
+  id              String       @id @default(uuid())
+  agencyUserId    String
+  clientId        String
+  createdAt       DateTime     @default(now())
+
+  agencyUser      User         @relation(fields: [agencyUserId], references: [id], onDelete: Cascade)
+  client          Organization @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([agencyUserId, clientId])
+  @@map("client_assignments")
+}
+
+// ---------------------------------------------
+// 3. CONTACTS & ENQUIRIES (LEADS)
+// ---------------------------------------------
+model Contact {
+  id              String       @id @default(uuid())
+  organizationId  String
+  phone           String
+  email           String?
+  fullName        String
+  city            String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leads           Lead[]
+
+  @@unique([organizationId, phone])
+  @@index([organizationId, email])
+  @@map("contacts")
+}
+
+model Lead {
+  id                 String             @id @default(uuid())
+  organizationId     String
+  contactId          String
+  assignedUserId     String?
+  
+  // Locked Original Ingestion Information (Immutable)
+  rawFullName        String
+  rawPhone           String
+  rawEmail           String?
+  sourcePlatform     PlatformType
+  externalLeadId     String?
+  campaignId         String?
+  adSetId            String?
+  adId               String?
+  formId             String?
+  submittedAt        DateTime           @default(now())
+  
+  // CRM Managed Fields
+  status             LeadStatus         @default(NEW)
+  isDuplicate        Boolean            @default(false)
+  tags               Json?
+  lastContactedAt    DateTime?
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  contact            Contact            @relation(fields: [contactId], references: [id], onDelete: Cascade)
+  assignedUser       User?              @relation("AssignedSalesUser", fields: [assignedUserId], references: [id])
+  campaign           Campaign?          @relation(fields: [campaignId], references: [id])
+  adSet              AdSet?             @relation(fields: [adSetId], references: [id])
+  ad                 Ad?                @relation(fields: [adId], references: [id])
+  form               Form?              @relation(fields: [formId], references: [id])
+  
+  fieldValues        LeadFieldValue[]
+  notes              LeadNote[]
+  statusHistory      LeadStatusHistory[]
+  followUps          FollowUp[]
+  conversions        Conversion[]
+
+  @@unique([organizationId, externalLeadId])
+  @@index([organizationId, status])
+  @@index([organizationId, submittedAt])
+  @@index([organizationId, sourcePlatform])
+  @@map("leads")
+}
+
+model LeadFieldValue {
+  id          String   @id @default(uuid())
+  leadId      String
+  fieldKey    String
+  fieldLabel  String
+  fieldValue  String   @db.Text
+  fieldType   String   @default("text")
+
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@map("lead_field_values")
+}
+
+model LeadNote {
+  id          String   @id @default(uuid())
+  leadId      String
+  userId      String
+  content     String   @db.Text
+  isAudited   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  lead        Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  author      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@map("lead_notes")
+}
+
+model LeadStatusHistory {
+  id          String      @id @default(uuid())
+  leadId      String
+  changedById String
+  oldStatus   LeadStatus
+  newStatus   LeadStatus
+  notes       String?     @db.Text
+  createdAt   DateTime    @default(now())
+
+  lead        Lead        @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  changedBy   User        @relation(fields: [changedById], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@map("lead_status_history")
+}
+
+model FollowUp {
+  id           String         @id @default(uuid())
+  leadId       String
+  createdById  String
+  scheduledAt  DateTime
+  reminderNote String?        @db.Text
+  status       FollowUpStatus @default(PENDING)
+  completedAt  DateTime?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  lead         Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  createdBy    User           @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([scheduledAt, status])
+  @@map("follow_ups")
+}
+
+model Conversion {
+  id             String    @id @default(uuid())
+  leadId         String
+  createdById    String
+  conversionDate DateTime  @default(now())
+  value          Decimal   @db.Decimal(12, 2)
+  notes          String?   @db.Text
+  createdAt      DateTime  @default(now())
+
+  lead           Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  createdBy      User      @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([conversionDate])
+  @@map("conversions")
+}
+
+// ---------------------------------------------
+// 4. CAMPAIGN HIERARCHY & AD METRICS
+// ---------------------------------------------
+model Campaign {
+  id             String        @id @default(uuid())
+  organizationId String
+  platform       PlatformType
+  externalId     String?
+  name           String
+  channelType    String?       // e.g. SEARCH, PERFORMANCE_MAX, DISPLAY, SHOPPING, DEMAND_GEN, VIDEO
+  budget         Decimal?      @db.Decimal(12, 2)
+  biddingStrategy String?
+  status         String        @default("ACTIVE")
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  adSets         AdSet[]
+  leads          Lead[]
+  metrics        AdMetric[]
+
+  @@unique([organizationId, platform, externalId])
+  @@map("campaigns")
+}
+
+model AdSet {
+  id             String        @id @default(uuid())
+  campaignId     String
+  externalId     String?
+  name           String
+  type           String?       // e.g. SEARCH_STANDARD, DISPLAY_STANDARD
+  status         String        @default("ACTIVE")
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  campaign       Campaign      @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  ads            Ad[]
+  leads          Lead[]
+  metrics        AdMetric[]
+
+  @@index([campaignId])
+  @@map("ad_sets")
+}
+
+model Ad {
+  id             String        @id @default(uuid())
+  adSetId        String
+  externalId     String?
+  name           String
+  type           String?       // e.g. RESPONSIVE_SEARCH_AD, EXPANDED_TEXT_AD, DISPLAY
+  status         String        @default("ACTIVE")
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  adSet          AdSet         @relation(fields: [adSetId], references: [id], onDelete: Cascade)
+  leads          Lead[]
+  metrics        AdMetric[]
+
+  @@index([adSetId])
+  @@map("ads")
+}
+
+model AdMetric {
+  id              String        @id @default(uuid())
+  date            DateTime      @db.Date
+  campaignId      String?
+  adSetId         String?
+  adId            String?
+  spend           Decimal       @db.Decimal(12, 2) @default(0)
+  impressions     Int           @default(0)
+  reach           Int           @default(0)
+  clicks          Int           @default(0)
+  conversions     Int           @default(0)
+  conversionValue Decimal       @db.Decimal(12, 2) @default(0)
+  platformLeads   Int           @default(0)
+  device          String?       // DESKTOP, MOBILE, TABLET, OTHER
+  network         String?       // SEARCH, CONTENT, YOUTUBE, MIXED
+
+  campaign        Campaign?     @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  adSet           AdSet?        @relation(fields: [adSetId], references: [id], onDelete: Cascade)
+  ad              Ad?           @relation(fields: [adId], references: [id], onDelete: Cascade)
+
+  @@index([date])
+  @@index([campaignId, date])
+  @@map("ad_metrics")
+}
+
+// ---------------------------------------------
+// 5. INTEGRATIONS & SYNC LOGS
+// ---------------------------------------------
+model Integration {
+  id             String            @id @default(uuid())
+  organizationId String
+  platform       PlatformType
+  accountName    String?
+  externalId     String?
+  credentials    String            @db.Text
+  status         IntegrationStatus @default(DISCONNECTED)
+  lastSyncAt     DateTime?
+  errorMessage   String?           @db.Text
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  syncLogs       IntegrationSyncLog[]
+  googleLeadFormMappings GoogleLeadFormMapping[]
+
+  @@unique([organizationId, platform, externalId])
+  @@map("integrations")
+}
+
+model IntegrationSyncLog {
+  id               String        @id @default(uuid())
+  integrationId    String
+  status           String
+  recordsProcessed Int           @default(0)
+  errorMessage     String?       @db.Text
+  payloadSample    Json?
+  startedAt        DateTime      @default(now())
+  completedAt      DateTime?
+
+  integration      Integration   @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+
+  @@index([integrationId, startedAt])
+  @@map("integration_sync_logs")
+}
+
+model IngestedWebhookEvent {
+  id              String        @id @default(uuid())
+  platform        PlatformType
+  organizationId  String?
+  externalEventId String?       // Idempotency key (e.g. Meta leadgen_id, WhatsApp message.id, Google lead_id)
+  eventType       String        // e.g. leadgen, whatsapp_message, google_lead_form, linkedin_lead
+  status          String        @default("RECEIVED") // RECEIVED, VALIDATED, QUEUED, PROCESSING, PROCESSED, INVALID, RETRYING, FAILED, DEAD_LETTERED
+  rawHeaders      Json?
+  payload         Json
+  retryCount      Int           @default(0)
+  errorMessage    String?       @db.Text
+  leadId          String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  processedAt     DateTime?
+
+  organization    Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([platform, status])
+  @@index([externalEventId])
+  @@index([organizationId, createdAt])
+  @@map("ingested_webhook_events")
+}
+
+model GoogleLeadFormMapping {
+  id               String       @id @default(uuid())
+  organizationId   String
+  integrationId    String?
+  googleCustomerId String       // e.g. "1111111111" (standardized numeric without dashes)
+  googleFormId     String       // e.g. "1001"
+  campaignId       String?      // e.g. "987654321" (optional specific campaign link)
+  webhookSecret    String       // Per-form or per-client secret key (e.g. "Secret_A")
+  formName         String?      // e.g. "Solitaire Diamond Consultation Form"
+  isActive         Boolean      @default(true)
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  integration      Integration? @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+
+  @@unique([googleFormId, googleCustomerId])
+  @@index([googleFormId])
+  @@index([googleCustomerId])
+  @@index([organizationId])
+  @@map("google_lead_form_mappings")
+}
+
+// ---------------------------------------------
+// 6. WEBSITE FORM BUILDER
+// ---------------------------------------------
+model Form {
+  id               String            @id @default(uuid())
+  organizationId   String
+  name             String
+  slug             String            @unique
+  submitButtonText String            @default("Submit")
+  thankYouMessage  String            @default("Thank you! We will get in touch with you shortly.")
+  isPublished      Boolean           @default(true)
+  fieldsConfig     Json
+  utmParameters    Json?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leads            Lead[]
+  submissions      FormSubmission[]
+
+  @@index([organizationId])
+  @@map("forms")
+}
+
+model FormSubmission {
+  id          String   @id @default(uuid())
+  formId      String
+  ipAddress   String?
+  userAgent   String?
+  payload     Json
+  createdAt   DateTime @default(now())
+
+  form        Form     @relation(fields: [formId], references: [id], onDelete: Cascade)
+
+  @@index([formId])
+  @@map("form_submissions")
+}
+
+// ---------------------------------------------
+// 7. NOTIFICATIONS & AUDIT LOGS
+// ---------------------------------------------
+model Notification {
+  id             String       @id @default(uuid())
+  organizationId String
+  userId         String
+  title          String
+  message        String       @db.Text
+  type           String
+  entityId       String?
+  isRead         Boolean      @default(false)
+  createdAt      DateTime     @default(now())
+
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([organizationId])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id             String        @id @default(uuid())
+  organizationId String?
+  userId         String?
+  action         String
+  entityType     String
+  entityId       String
+  details        Json?
+  ipAddress      String?
+  createdAt      DateTime      @default(now())
+
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user           User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId, createdAt])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+model GoogleKeywordMetric {
+  id              String       @id @default(uuid())
+  organizationId  String
+  campaignId      String
+  adGroupId       String?
+  keywordText     String
+  matchType       String       // EXACT, PHRASE, BROAD
+  status          String       @default("ENABLED")
+  date            DateTime     @db.Date
+  impressions     Int          @default(0)
+  clicks          Int          @default(0)
+  spend           Decimal      @db.Decimal(12, 2) @default(0)
+  conversions     Int          @default(0)
+  conversionValue Decimal      @db.Decimal(12, 2) @default(0)
+  createdAt       DateTime     @default(now())
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, date])
+  @@index([campaignId])
+  @@map("google_keyword_metrics")
+}
+
+model GoogleSearchTermMetric {
+  id              String       @id @default(uuid())
+  organizationId  String
+  campaignId      String
+  adGroupId       String?
+  searchTerm      String
+  status          String       @default("NONE")
+  date            DateTime     @db.Date
+  impressions     Int          @default(0)
+  clicks          Int          @default(0)
+  spend           Decimal      @db.Decimal(12, 2) @default(0)
+  conversions     Int          @default(0)
+  conversionValue Decimal      @db.Decimal(12, 2) @default(0)
+  createdAt       DateTime     @default(now())
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, date])
+  @@index([campaignId])
+  @@map("google_search_term_metrics")
+}
+
+model GoogleAssetGroupMetric {
+  id              String       @id @default(uuid())
+  organizationId  String
+  campaignId      String
+  assetGroupId    String
+  assetGroupName  String
+  status          String       @default("ENABLED")
+  date            DateTime     @db.Date
+  impressions     Int          @default(0)
+  clicks          Int          @default(0)
+  spend           Decimal      @db.Decimal(12, 2) @default(0)
+  conversions     Int          @default(0)
+  conversionValue Decimal      @db.Decimal(12, 2) @default(0)
+  createdAt       DateTime     @default(now())
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, date])
+  @@index([campaignId])
+  @@map("google_asset_group_metrics")
+}
