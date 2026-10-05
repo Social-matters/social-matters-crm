@@ -33,6 +33,7 @@ function OAuthCallbackContent() {
     }
 
     const processOAuth = async () => {
+      try {
         const rawState = searchParams.get('state');
         const iss = searchParams.get('iss') || '';
         const scope = searchParams.get('scope') || '';
