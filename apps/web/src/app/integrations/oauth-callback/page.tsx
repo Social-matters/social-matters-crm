@@ -34,8 +34,22 @@ function OAuthCallbackContent() {
 
     const processOAuth = async () => {
         const rawState = searchParams.get('state');
+        const iss = searchParams.get('iss') || '';
+        const scope = searchParams.get('scope') || '';
+        const codeParam = searchParams.get('code') || '';
+
         let targetPlatform = 'META';
         let orgId = activeClient?.id || user?.organizationId;
+
+        // Guaranteed Google detection from iss, scope, or code prefix
+        if (
+          iss.includes('google.com') ||
+          scope.includes('adwords') ||
+          scope.includes('google') ||
+          codeParam.startsWith('4/')
+        ) {
+          targetPlatform = 'GOOGLE';
+        }
 
         if (rawState) {
           try {

@@ -186,8 +186,11 @@ export class IntegrationsService {
     code: string,
     redirectUri: string,
     organizationId: string,
-    user: AuthenticatedUser,
-  ) {
+    // Auto-detect Google OAuth code (Google codes consistently start with '4/')
+    if (code?.startsWith('4/') && platform !== PlatformType.GOOGLE) {
+      platform = PlatformType.GOOGLE;
+    }
+
     if (platform === PlatformType.META) {
       const { accessToken } = await this.metaGraphService.exchangeCodeForToken(code, redirectUri);
       const pages = await this.metaGraphService.getManagedPages(accessToken);
